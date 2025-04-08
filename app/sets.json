@@ -3,8 +3,8 @@
     "patch_exe": "C:/Program Files/Adobe/Adobe Photoshop 2025/Photoshop.exe",
     "patch_sync": 1,
     "patch_size": 0,
-    "fov": 60,
-    "phi": -90,
-    "theta": 31,
+    "fov": 138,
+    "phi": 4,
+    "theta": 30,
     "aspect": "1:1"
 }
