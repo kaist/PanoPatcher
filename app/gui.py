@@ -145,6 +145,7 @@ class Gui:
         self.style.configure("big.info.TButton", font=("", 14),anchor=W)
         self.style.configure("big.success.TButton", font=("", 14),anchor=W)
 
+
         dark_title_bar(self.root)
         self.root.tk.call('wm', 'iconphoto', self.root._w, icons.icon)
         self.root.iconphoto(True, icons.icon)
@@ -286,8 +287,14 @@ class Gui:
         self.screen_button=Button(self.canv_frame,image=icons.shot,command=self.save_image)
         self.main_canvas.create_window(self.win_size[0]-160,self.win_size[1]-10,anchor=SE,window=self.screen_button)
 
-        self.favor_button=Button(self.canv_frame,image=icons.favorite,command=self.open_favorites)
+        self.favor_button=Menubutton(self.canv_frame,image=icons.favorite)
         self.main_canvas.create_window(self.win_size[0]-10,10,anchor=NE,window=self.favor_button)
+
+        self.favor_menu = Menu(self.favor_button, tearoff=0,bg="red",foreground='green',relief=FLAT)
+        self.build_f_menu()
+
+
+        self.favor_button.config(menu=self.favor_menu)
 
 
 
@@ -300,6 +307,12 @@ class Gui:
         self.root.after(100,self.splash_remove)
 
    
+    def build_f_menu(self):
+        self.favor_menu.delete(0,END)
+        self.favor_menu.add_command(label="Копировать", command=lambda: print("Копировать"))
+        self.favor_menu.add_separator()
+        self.favor_menu.add_command(label='В избранное...',image=icons.add_favorite,compound=LEFT)
+
     def open_favorites(self):
         pass
 
@@ -500,7 +513,7 @@ class Gui:
             (_("The executable file of the editor (exe)"), "*.exe"),
                     )
         file_path = filedialog.askopenfilename(
-                title="Выберите файл изображения",
+                title=_("Select executable"),
                 filetypes=filetypes,
                 multiple=False 
             )  
@@ -625,7 +638,7 @@ class Gui:
 
     def add_pano_command(self):
         filetypes = (
-            (_("Images"), "*.jpg;*.jpeg;*.png;*.tiff"),
+            (_("Images"), "*.jpg;*.jpeg;*.png;*.tif;*.tiff"),
                     )
         file_path = filedialog.askopenfilename(
                 title=_("Select files with panoramas"),
@@ -699,7 +712,7 @@ class Gui:
         if '_' in p:
             p=p.split('_')[-1]
 
-        return p
+        return p[-10:]
 
 
 

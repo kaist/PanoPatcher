@@ -162,10 +162,10 @@ class App:
         del img
         pimg=Image.fromarray(rgb_img)
         del rgb_img
-        ratio=(int(self.gui.aspect_var.get().split(':')[0]),int(self.gui.aspect_var.get().split(':')[1]))
-        img=self.crop_image_by_ratio(pimg,aspect_ratio=ratio,max_width=width,max_height=width)
-        img.save('app/data/patch.tiff',compression='raw')
-        del img
+        #ratio=(int(self.gui.aspect_var.get().split(':')[0]),int(self.gui.aspect_var.get().split(':')[1]))
+        #img=self.crop_image_by_ratio(pimg,aspect_ratio=ratio,max_width=width,max_height=width)
+        pimg.save('app/data/patch.tiff',compression='raw')
+        del pimg
         gc.collect()
         if batch:return
      
@@ -340,6 +340,10 @@ class App:
         
 
     def open_pano(self):
+        if not self.file_list:return
+        try:self.file_list[self.cur_file]
+        except:return
+        
         self.messages.put({'action':'open','data':self.file_list[self.cur_file]})
 
     def make_pers(self,width=1200,clear=False):
@@ -417,6 +421,28 @@ class App:
         i=ImageTk.PhotoImage(image=img)
         self.icons[fname]=i
         return i
+
+    def drop_files(self,event):
+        paths = root.tk.splitlist(event.data)
+        file_list=[]
+        for path in paths:
+            if os.path.isfile(path):
+                # Проверяем расширение файла
+                if path.lower().endswith(('.jpg', '.jpeg','.png', '.tiff', '.tif')):
+                    file_list.append(path)
+            elif os.path.isdir(path):
+                # Для папок проверяем все файлы внутри
+                for item in os.listdir(path):
+                    full_path = os.path.join(path, item)
+                    if os.path.isfile(full_path):
+                        if full_path.lower().endswith(('.jpg','.png', '.jpeg', '.tiff', '.tif')):
+                            file_list.append(full_path)
+        for f in file_list:
+            t={'path':Path(f),'size':[0,0],'done':False}
+            self.file_list.append(t)
+        self.th=threading.Thread(target=self.gui.rebiuld_file_list)
+        self.th.daemon = True
+        self.th.start()
         
 
     
@@ -448,10 +474,19 @@ if __name__=='__main__':
     from PIL import Image
     from photoshop import Session
     import photoshop.api as ps
+    from tkinterdnd2 import TkinterDnD, DND_FILES
 
-    
 
-    root=Window(themename="darkly",hdpi=False)
+    class CTk(Window, TkinterDnD.DnDWrapper):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.TkdndVersion = TkinterDnD._require(self)
+
+
+
+    root=CTk(themename="darkly",hdpi=False)
+    root.drop_target_register(DND_FILES)
+
     root.iconify()
     root.update()
 
@@ -460,6 +495,7 @@ if __name__=='__main__':
     sets=AppSets()
     gui=Gui(root,sets,progress)
     app=App(gui,sets)
+    root.dnd_bind('<<Drop>>', app.drop_files)
     gui.app=app
     root.protocol("WM_DELETE_WINDOW", app.on_closing)
 
