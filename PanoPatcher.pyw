@@ -33,7 +33,8 @@ class AppSets:
             'phi': 0,
             'theta': 0,
             'aspect':'1:1',
-            'favorites':[]
+            'favorites':[],
+            'autosave':True,
         })
         try:
             l=json.loads(open('app/sets.json').read())
@@ -116,6 +117,9 @@ class App:
                 pass
     def th_open(self,path,batch=False):
         self.is_opening=True
+        subfolder_path = path.parent /"pathed"/path.name
+        if subfolder_path.exists():
+            path=subfolder_path
         self.loaded_image=E2P.Equirectangular(path)
         self.is_opening=False
         if not batch:
@@ -303,6 +307,9 @@ class App:
         try:Path.cwd()/Path('app/data/patch.tiff').unlink()
         except:pass
         gc.collect()
+
+        if self.sets.autosave:
+            self.th_save(batch=True)
         
 
         if not batch:

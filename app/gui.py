@@ -6,6 +6,7 @@ from tkinter import *
 #from tkinter.ttk import *
 from ttkbootstrap import *
 from ttkbootstrap.constants import *
+from ttkbootstrap.dialogs.dialogs import Querybox
 from tkinter import filedialog
 from tkinter.font import Font
 from pathlib import Path
@@ -311,7 +312,13 @@ class Gui:
         self.favor_menu.delete(0,END)
         self.favor_menu.add_command(label="Копировать", command=lambda: print("Копировать"))
         self.favor_menu.add_separator()
-        self.favor_menu.add_command(label='В избранное...',image=icons.add_favorite,compound=LEFT)
+        self.favor_menu.add_command(label='В избранное...',image=icons.add_favorite,command=self.new_favorite,compound=LEFT)
+
+    def new_favorite(self):
+        query = Querybox()
+        
+        s=query.get_string(prompt="name",title="add fav")
+        print(s)
 
     def open_favorites(self):
         pass
@@ -449,6 +456,8 @@ class Gui:
         dark_title_bar(self.swin)
         self.sets_path_exe=self.app.sets.patch_exe
         self.sets_path_app_var = IntVar(value=self.app.sets.patch_type)
+        self.sets_autosave_var = IntVar(value=self.app.sets.autosave)
+
         self.sets_sync_var=IntVar(value=self.app.sets.patch_sync)
 
         Radiobutton(
@@ -485,10 +494,17 @@ class Gui:
                 variable=self.sets_sync_var,
                 ).grid(row=3,column=0,columnspan=2,padx=10,pady=10,sticky=NW)
 
+
+        Checkbutton(
+                self.swin,
+                text=_("Auto save result"),
+                variable=self.sets_autosave_var,
+                ).grid(row=4,column=0,columnspan=2,padx=10,pady=10,sticky=NW)
+
         Label(
             self.swin,
             text=_('Patch size')
-            ).grid(row=4,column=0,padx=10,pady=10,sticky=E)
+            ).grid(row=5,column=0,padx=10,pady=10,sticky=E)
 
         options = [
                 _("Maximum size"),
@@ -500,9 +516,9 @@ class Gui:
         self.sets_combo=Combobox(self.swin,value=options,width=20,state="readonly")
         self.sets_combo.current(self.app.sets.patch_size)
         self.sets_combo.bind("<<ComboboxSelected>>", self.sets_combo_select)
-        self.sets_combo.grid(row=4,column=1,padx=10,pady=10,sticky=W)
+        self.sets_combo.grid(row=5,column=1,padx=10,pady=10,sticky=W)
 
-        Button(self.swin,text=_('Save settings'),command=self.save_sets,bootstyle='primary',image=icons.done16,compound=LEFT).grid(row=5,column=0,columnspan=2,padx=10,pady=20)
+        Button(self.swin,text=_('Save settings'),command=self.save_sets,bootstyle='primary',image=icons.done16,compound=LEFT).grid(row=6,column=0,columnspan=2,padx=10,pady=20)
 
         self.swin.update_idletasks()
         self.swin.place_window_center()
@@ -529,6 +545,7 @@ class Gui:
         self.app.sets.patch_sync=self.sets_sync_var.get()
         self.app.sets.patch_size=self.sets_size_var.get()
         self.app.sets.patch_exe=self.sets_path_exe
+        self.app.sets.autosave=self.sets_autosave_var.get()
         self.app.sets.save()
         self.swin.destroy()
 

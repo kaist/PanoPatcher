@@ -1,10 +1,12 @@
 {
     "patch_type": 0,
-    "patch_exe": "C:/Program Files/Adobe/Adobe Photoshop 2025/Photoshop.exe",
+    "patch_exe": "",
     "patch_sync": 1,
-    "patch_size": 1,
-    "fov": 175,
+    "patch_size": 2,
+    "fov": 90,
     "phi": -90,
-    "theta": -40,
-    "aspect": "16:9"
+    "theta": -2,
+    "aspect": "1:1",
+    "favorites": [],
+    "autosave": 1
 }
