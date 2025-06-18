@@ -40,3 +40,7 @@ Panorama saved=Панорама сохранена
 Look for it in the "patched" subdirectory=Ищи ее в подкаталоге "pathed"
 Snapshot is saving...=Снапшот сохраняется...
 Stop=Остановить
+Auto save result=Авто сохранение результата
+Add position to favorite=Добавить позицию в избранное
+Favorite name=Имя в избранном
+Remove from favorites=Удалить из избранного

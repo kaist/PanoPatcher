@@ -115,7 +115,7 @@ class ImageLabel(Label):
 
 
 class Gui:
-    def __init__(self,root,sets,progress):
+    def __init__(self,root,sets,progress,version):
         self.root=root
         self.progress=progress
 
@@ -153,7 +153,7 @@ class Gui:
 
         try:self.root.state('zoomed')
         except:self.root.attributes('-zoomed', True)
-        self.root.title('PanoPatcher')
+        self.root.title('PanoPatcher '+version)
         scale=self.root.winfo_fpixels('1i')/72
         self.root.tk.call('tk', 'scaling', scale)
 
@@ -292,7 +292,7 @@ class Gui:
         self.main_canvas.create_window(self.win_size[0]-10,10,anchor=NE,window=self.favor_button)
 
         self.favor_menu = Menu(self.favor_button, tearoff=0,bg="red",foreground='green',relief=FLAT)
-        self.build_f_menu()
+
 
 
         self.favor_button.config(menu=self.favor_menu)
@@ -307,21 +307,48 @@ class Gui:
         self.app=None
         self.root.after(100,self.splash_remove)
 
+
    
     def build_f_menu(self):
         self.favor_menu.delete(0,END)
-        self.favor_menu.add_command(label="Копировать", command=lambda: print("Копировать"))
-        self.favor_menu.add_separator()
-        self.favor_menu.add_command(label='В избранное...',image=icons.add_favorite,command=self.new_favorite,compound=LEFT)
+        self.rm_menu=Menu(self.favor_menu, tearoff=0,bg="red",foreground='green',relief=FLAT)
+
+        for n,item in enumerate(self.app.sets.favorites):
+            self.favor_menu.add_command(label=item['name'], command=lambda i=n: self.apply_favorite(i))
+            self.rm_menu.add_command(label=item['name'], command=lambda i=n: self.rm_favorite(i))            
+        if self.app.sets.favorites:
+            self.favor_menu.add_separator()
+        self.favor_menu.add_command(label=_('Add position to favorite'),image=icons.add_favorite,command=self.new_favorite,compound=LEFT)
+        if self.app.sets.favorites:
+            self.favor_menu.add_cascade(label=_("Remove from favorites"),image=icons.remove_favorite,compound=LEFT, menu=self.rm_menu)
+
+    def rm_favorite(self,item):
+        del self.app.sets.favorites[item]
+        self.app.sets.save()
+        self.build_f_menu()
+
+    def apply_favorite(self,item):
+        i=self.app.sets.favorites[item]
+        self.fov_var.set(i['fov'])
+        self.phi_var.set(i['phi'])
+        self.theta_var.set(i['theta'])
+
 
     def new_favorite(self):
         query = Querybox()
+        s=query.get_string(prompt=_("Favorite name"),title=_("Add position to favorite"))
+        if not s:return
+        d={
+            'fov':self.fov_var.get(),
+            'phi':self.phi_var.get(),
+            'theta':self.theta_var.get(),
+            'name':s
+        }
+        self.app.sets.favorites.append(d)
+        self.app.sets.save()
+        self.build_f_menu()
         
-        s=query.get_string(prompt="name",title="add fav")
-        print(s)
 
-    def open_favorites(self):
-        pass
 
     def splash_remove(self,event=None):
         try:

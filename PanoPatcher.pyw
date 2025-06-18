@@ -2,7 +2,7 @@ import sys,os
 sys.dont_write_bytecode=True
 from pathlib import Path
 
-VERSION='1.23'
+VERSION='1.24'
 PORTABLE=False
 DATA_PATH=Path('app/')
 
@@ -308,7 +308,7 @@ class App:
         except:pass
         gc.collect()
 
-        if self.sets.autosave:
+        if self.sets.autosave and not batch:
             self.th_save(batch=True)
         
 
@@ -500,10 +500,11 @@ if __name__=='__main__':
     progress = PyTaskbar.Progress(int(root.wm_frame(), 16))
     progress.init()
     sets=AppSets()
-    gui=Gui(root,sets,progress)
+    gui=Gui(root,sets,progress,VERSION)
     app=App(gui,sets)
     root.dnd_bind('<<Drop>>', app.drop_files)
     gui.app=app
+    gui.build_f_menu()
     root.protocol("WM_DELETE_WINDOW", app.on_closing)
 
 

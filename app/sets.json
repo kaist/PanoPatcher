@@ -2,11 +2,18 @@
     "patch_type": 0,
     "patch_exe": "",
     "patch_sync": 1,
-    "patch_size": 2,
-    "fov": 90,
-    "phi": -90,
-    "theta": -2,
+    "patch_size": 1,
+    "fov": 135,
+    "phi": 3,
+    "theta": -37,
     "aspect": "1:1",
-    "favorites": [],
+    "favorites": [
+        {
+            "fov": 135,
+            "phi": 3,
+            "theta": -37,
+            "name": "test"
+        }
+    ],
     "autosave": 1
 }
