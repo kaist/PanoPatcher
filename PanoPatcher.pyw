@@ -2,19 +2,19 @@ import sys,os
 sys.dont_write_bytecode=True
 from pathlib import Path
 
-VERSION='1.24'
+VERSION='1.25'
 PORTABLE=False
-DATA_PATH=Path('app/')
+DATA_PATH=Path('app') if PORTABLE else Path().home()/Path('.panopatcher')
+
+DATA_PATH.mkdir(parents=True, exist_ok=True)
+(DATA_PATH/'data').mkdir(parents=True, exist_ok=True)
 
 if hasattr(sys,"frozen"):
     os.chdir(os.path.dirname(sys.executable))
     p=DATA_PATH/Path('error.txt')
-    if not p.parent.exists():
-        p.parent.mkdir()
     sys.stderr=open(p,'a+')
 
-if not DATA_PATH.exists():
-    DATA_PATH.mkdir()
+
 
 
 
@@ -37,7 +37,7 @@ class AppSets:
             'autosave':True,
         })
         try:
-            l=json.loads(open('app/sets.json').read())
+            l=json.loads(open(DATA_PATH/'sets.json').read())
             object.__setattr__(self, 'dd',l)
         except:pass
 
@@ -55,7 +55,7 @@ class AppSets:
             self.dd[ind] = value
 
     def save(self):
-        with open('app/sets.json', 'w') as f:
+        with open(DATA_PATH/'sets.json', 'w') as f:
             json.dump(self.dd, f, indent=4)
 
 
@@ -168,12 +168,12 @@ class App:
         del rgb_img
         #ratio=(int(self.gui.aspect_var.get().split(':')[0]),int(self.gui.aspect_var.get().split(':')[1]))
         #img=self.crop_image_by_ratio(pimg,aspect_ratio=ratio,max_width=width,max_height=width)
-        pimg.save('app/data/patch.tiff',compression='raw')
+        pimg.save(DATA_PATH/'data/patch.tiff',compression='raw')
         del pimg
         gc.collect()
         if batch:return
      
-        file_path=Path.cwd()/Path('app/data/patch.tiff')
+        file_path=DATA_PATH/'data/patch.tiff'
         if self.sets.patch_type==2:
             self.gui.loader_text.set(_('The patch is done!|Edit and save it there.'))
 
@@ -219,7 +219,7 @@ class App:
             self.gui.loader_text.set(f'{n+1}/{ln } '+_('Creating a patch...'))
             self.th_patch(fov,theta,phi,batch=True)
             self.gui.loader_text.set(f'{n+1}/{ln } '+_('Photoshop is working...'))
-            with Session(str(Path.cwd()/Path('app/data/patch.tiff')), action="open",auto_close=True) as ps1:
+            with Session(str(DATA_PATH/'data/patch.tiff'), action="open",auto_close=True) as ps1:
                 ps1.app.doAction(action=self.gui.lev2_var.get(),action_from=self.gui.lev1_var.get())
                 ps1.active_document.save()
             self.gui.loader_text.set(f'{n+1}/{ln } '+_('Applying patch...'))
@@ -229,7 +229,7 @@ class App:
             d=self.file_list[self.cur_file]
             d['done']=True
             self.file_list[self.cur_file]=d
-            try:Path.cwd()/Path('app/data/patch.tiff').unlink()
+            try:(DATA_PATH/'data/patch.tiff').unlink()
             except:pass
 
             
@@ -237,7 +237,7 @@ class App:
         self.gui.toast(_('Done!'),_('Batch complete!'))
 
     def worker_waiter(self):
-        file_path=Path.cwd()/Path('app/data/patch.tiff')
+        file_path=DATA_PATH/'data/patch.tiff'
         while True:
             if self.waiter:
                 if os.path.getmtime(file_path)>self.current_time:
@@ -294,7 +294,7 @@ class App:
         self.gui.patch_button.config(state='disable',text=_('Make patch'))
 
 
-        equ = m_P2E.Perspective([Path.cwd()/Path('app/data/patch.tiff')],
+        equ = m_P2E.Perspective([DATA_PATH/'data/patch.tiff'],
                             [[self.cur_sets['fov'], self.cur_sets['theta'], self.cur_sets['phi']]])   
         img = equ.GetEquirec(self.loaded_image._img,self.loaded_image._img.shape[0],self.loaded_image._img.shape[1])
 
@@ -304,7 +304,7 @@ class App:
         gc.collect()
         self.loaded_image._img=cv2.imdecode(buffer,cv2.IMREAD_COLOR)
         del buffer
-        try:Path.cwd()/Path('app/data/patch.tiff').unlink()
+        try:(DATA_PATH/'data/patch.tiff').unlink()
         except:pass
         gc.collect()
 
@@ -399,7 +399,7 @@ class App:
         self.sets.theta=self.gui.theta_var.get()
         self.sets.aspect=self.gui.aspect_var.get()
         self.sets.save()
-        try:Path.cwd()/Path('app/data/patch.tiff').unlink()
+        try:(DATA_PATH/'data/patch.tiff').unlink()
         except:pass
         self.gui.root.destroy()
 
@@ -478,7 +478,10 @@ if __name__=='__main__':
     import app.lib.Equirec2Perspec as E2P
     import app.lib.Perspec2Equirec as P2E
     import app.lib.multi_Perspec2Equirec as m_P2E
+    import PIL
+    PIL.Image.MAX_IMAGE_PIXELS = 9331200000
     from PIL import Image
+
     from photoshop import Session
     import photoshop.api as ps
     from tkinterdnd2 import TkinterDnD, DND_FILES
