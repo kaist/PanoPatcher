@@ -3,9 +3,9 @@
     "patch_exe": "",
     "patch_sync": 1,
     "patch_size": 1,
-    "fov": 135,
-    "phi": 3,
-    "theta": -37,
+    "fov": 130,
+    "phi": -5,
+    "theta": -78,
     "aspect": "1:1",
     "favorites": [
         {

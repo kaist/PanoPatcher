@@ -2,17 +2,21 @@ import sys,os
 sys.dont_write_bytecode=True
 from pathlib import Path
 
-VERSION='1.25'
-PORTABLE=False
-DATA_PATH=Path('app') if PORTABLE else Path().home()/Path('.panopatcher')
-
-DATA_PATH.mkdir(parents=True, exist_ok=True)
-(DATA_PATH/'data').mkdir(parents=True, exist_ok=True)
+VERSION='1.30'
+PORTABLE=True
+APP_DIR=Path(sys.executable).resolve().parent if hasattr(sys,"frozen") else Path(__file__).resolve().parent
+if hasattr(sys,"frozen"):
+    os.chdir(APP_DIR)
+DATA_PATH=APP_DIR/Path('app') if PORTABLE else Path().home()/Path('.panopatcher')
 
 if hasattr(sys,"frozen"):
-    os.chdir(os.path.dirname(sys.executable))
+    DATA_PATH.mkdir(parents=True, exist_ok=True)
+    (DATA_PATH/'data').mkdir(parents=True, exist_ok=True)
     p=DATA_PATH/Path('error.txt')
     sys.stderr=open(p,'a+')
+else:
+    DATA_PATH.mkdir(parents=True, exist_ok=True)
+    (DATA_PATH/'data').mkdir(parents=True, exist_ok=True)
 
 
 
@@ -24,7 +28,7 @@ if hasattr(sys,"frozen"):
 
 class AppSets:
     def __init__(self):
-        object.__setattr__(self, 'dd', {
+        defaults = {
             'patch_type': 0,
             'patch_exe': '',
             'patch_sync': True,
@@ -35,10 +39,14 @@ class AppSets:
             'aspect':'1:1',
             'favorites':[],
             'autosave':True,
-        })
+        }
+        object.__setattr__(self, 'dd', defaults.copy())
         try:
             l=json.loads(open(DATA_PATH/'sets.json').read())
-            object.__setattr__(self, 'dd',l)
+            defaults.update(l)
+            if not isinstance(defaults.get('favorites'),list):
+                defaults['favorites']=[]
+            object.__setattr__(self, 'dd',defaults)
         except:pass
 
 
@@ -80,6 +88,7 @@ class App:
 
         self.current_time=0
         self.waiter=False
+        self.preview_fast=False
         self.th2=threading.Thread(target=self.worker_waiter)
         self.th2.daemon = True
         self.th2.start()
@@ -92,7 +101,7 @@ class App:
                     self.th_open(message['data']['path'])
                 if message['action']=='get_pers':
                     d=message['data']
-                    self.th_pers(d['fov'],d['theta'],d['phi'],d['width'])
+                    self.th_pers(d['fov'],d['theta'],d['phi'],d['width'],d.get('interpolation'))
                 if message['action']=='save_shot':
                     d=message['data']
                     self.th_shot(d['fov'],d['theta'],d['phi'],d['filename'])     
@@ -128,11 +137,12 @@ class App:
 
 
 
-    def th_pers(self,fov,theta,phi,width):
+    def th_pers(self,fov,theta,phi,width,interpolation=None):
         if not self.loaded_image:return
-        img = self.loaded_image.GetPerspective(fov, theta, phi, width,width)
-        rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        self.pimg=Image.fromarray(rgb_img)
+        if interpolation is None:
+            interpolation=cv2.INTER_LINEAR
+        img = self.loaded_image.GetPerspective(fov, theta, phi, width,width, interpolation=interpolation)
+        self.pimg=self.cv_to_pil_preview(img)
         self.gui.update_image(self.pimg)
 
     def th_shot(self,fov,theta,phi,filename):
@@ -141,14 +151,16 @@ class App:
         width=min(sh[0],sh[1])
 
         img = self.loaded_image.GetPerspective(fov, theta, phi, width,width)
-        rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        del img
-        pimg=Image.fromarray(rgb_img)
-        del rgb_img
         ratio=(int(self.gui.aspect_var.get().split(':')[0]),int(self.gui.aspect_var.get().split(':')[1]))
-        img=self.crop_image_by_ratio(pimg,aspect_ratio=ratio,max_width=width,max_height=width)
-        img.save(filename,quality=90,optimize=True)
-        del img
+        if self.is_current_dng():
+            img=self.crop_array_by_ratio(img,aspect_ratio=ratio,max_width=width,max_height=width)
+            dng_io.write_linear_dng(filename,img,self.loaded_image.dng_metadata)
+        else:
+            pimg=self.cv_to_pil_preview(img)
+            del img
+            img=self.crop_image_by_ratio(pimg,aspect_ratio=ratio,max_width=width,max_height=width)
+            img.save(filename,quality=90,optimize=True)
+            del img
         gc.collect()
         self.gui.toast(_('Done!'),_('The snapshot is saved'))
         self.gui.stop_waiter()
@@ -238,11 +250,31 @@ class App:
 
     def worker_waiter(self):
         file_path=DATA_PATH/'data/patch.tiff'
+        last_seen=None
         while True:
-            if self.waiter:
-                if os.path.getmtime(file_path)>self.current_time:
-                    self.waiter=False
-                    self.patch_open()
+            try:
+                if self.waiter:
+                    try:
+                        mtime=os.path.getmtime(file_path)
+                        size=os.path.getsize(file_path)
+                    except (FileNotFoundError,PermissionError,OSError):
+                        last_seen=None
+                        time.sleep(1)
+                        continue
+                    current=(mtime,size)
+                    if mtime>self.current_time and last_seen==current:
+                        self.waiter=False
+                        last_seen=None
+                        self.patch_open_bg()
+                    else:
+                        last_seen=current
+            except Exception as e:
+                self.waiter=False
+                last_seen=None
+                try:
+                    sys.stderr.write(f'worker_waiter error: {e}\n')
+                except:
+                    pass
             time.sleep(1)         
 
 
@@ -251,16 +283,7 @@ class App:
         pathed_folder = file_path.parent / "pathed"
         pathed_folder.mkdir(parents=True, exist_ok=True)
         new_file_path = pathed_folder / file_path.name
-        rgb_img = cv2.cvtColor(self.loaded_image._img, cv2.COLOR_BGR2RGB)
-        pimg=Image.fromarray(rgb_img)
-        del rgb_img
-        gc.collect()
-        if file_path.suffix.lower()=='.jpg':
-            pimg.save(new_file_path,optimize=True,quality=100)
-        else:
-            pimg.save(new_file_path)
-        del pimg
-        gc.collect()
+        self.cv_save_unicode(new_file_path,self.loaded_image._img)
         if not batch:
             self.gui.stop_waiter()
             self.gui.toast(_('Panorama saved'),_('Look for it in the "patched" subdirectory'))
@@ -272,6 +295,8 @@ class App:
 
 
     def save_patch(self,batch=False):
+        if self.is_current_dng():
+            return
         if not batch:
             self.gui.start_waiter(text=_("Saving result..."))
 
@@ -280,11 +305,32 @@ class App:
                 self.messages.queue.clear()
         self.messages.put({'action':'save_patch','data':{}})          
 
+    def cv_save_unicode(self,path,img):
+        ext=Path(path).suffix.lower()
+        encode_ext=ext
+        if ext=='.jpeg':
+            encode_ext='.jpg'
+        elif ext=='.tiff':
+            encode_ext='.tif'
+        params=[]
+        if ext in ('.jpg','.jpeg'):
+            params=[cv2.IMWRITE_JPEG_QUALITY,100]
+            if hasattr(cv2,'IMWRITE_JPEG_OPTIMIZE'):
+                params.extend([cv2.IMWRITE_JPEG_OPTIMIZE,1])
+        success, buffer=cv2.imencode(encode_ext,img,params)
+        if not success:
+            raise OSError(f'Could not encode image as {ext}')
+        buffer.tofile(str(path))
+
     def patch_open_bg(self):
+        if self.is_current_dng():
+            return
         self.messages.put({'action':'patch_open','data':{}})          
 
 
     def patch_open(self,batch=False):
+        if self.is_current_dng():
+            return
         if not batch:
             self.gui.progress.setState('loading')
             self.gui.loader_text.set(_('Applying patch...'))
@@ -296,14 +342,9 @@ class App:
 
         equ = m_P2E.Perspective([DATA_PATH/'data/patch.tiff'],
                             [[self.cur_sets['fov'], self.cur_sets['theta'], self.cur_sets['phi']]])   
-        img = equ.GetEquirec(self.loaded_image._img,self.loaded_image._img.shape[0],self.loaded_image._img.shape[1])
-
-        success, buffer = cv2.imencode(".bmp", img)
-        del img
+        equ.GetEquirec(self.loaded_image._img,self.loaded_image._img.shape[0],self.loaded_image._img.shape[1],inplace=True)
         del equ
         gc.collect()
-        self.loaded_image._img=cv2.imdecode(buffer,cv2.IMREAD_COLOR)
-        del buffer
         try:(DATA_PATH/'data/patch.tiff').unlink()
         except:pass
         gc.collect()
@@ -328,8 +369,6 @@ class App:
         right = (img_width + target_width) // 2
         bottom = (img_height + target_height) // 2
         cropped_img = img.crop((left, top, right, bottom))
-        del img
-        gc.collect()
         new_width = min(target_width, max_width)
         new_height = min(target_height, max_height)
         
@@ -341,9 +380,36 @@ class App:
             
 
         resized_img = cropped_img.resize((new_width, new_height), Image.LANCZOS)
-        del cropped_img
-        gc.collect()
         return resized_img
+
+    def crop_array_by_ratio(self,img, aspect_ratio=(16, 9),max_width=100,max_height=100):
+        img_height, img_width = img.shape[:2]
+        target_width = min(img_width, int(img_height * (aspect_ratio[0] / aspect_ratio[1])))
+        target_height = min(img_height, int(img_width * (aspect_ratio[1] / aspect_ratio[0])))
+        left = (img_width - target_width) // 2
+        top = (img_height - target_height) // 2
+        right = (img_width + target_width) // 2
+        bottom = (img_height + target_height) // 2
+        cropped_img = img[top:bottom, left:right]
+
+        new_width = min(target_width, max_width)
+        new_height = min(target_height, max_height)
+        if target_width / target_height > max_width / max_height:
+            new_height = int(new_width * (target_height / target_width))
+        else:
+            new_width = int(new_height * (target_width / target_height))
+
+        if new_width != target_width or new_height != target_height:
+            return cv2.resize(cropped_img, (new_width, new_height), interpolation=cv2.INTER_LANCZOS4)
+        return cropped_img.copy()
+
+    def cv_to_pil_preview(self,img):
+        if self.is_current_dng():
+            return dng_io.linear_bgr_to_pil(img,self.loaded_image.dng_metadata)
+        return Image.fromarray(img[:, :, ::-1])
+
+    def is_current_dng(self):
+        return bool(self.loaded_image and getattr(self.loaded_image,'is_dng',False))
         
 
     def open_pano(self):
@@ -357,12 +423,36 @@ class App:
         fov=self.cur_sets['fov']
         theta=self.cur_sets['theta']
         phi=self.cur_sets['phi']
+        if width==1200 and self.gui:
+            width=self.get_preview_size()
+        interpolation=cv2.INTER_NEAREST if self.preview_fast else cv2.INTER_LINEAR
         if clear and not self.is_opening:
             with self.messages.mutex:
                 self.messages.queue.clear()
-        self.messages.put({'action':'get_pers','data':{'fov':fov,'theta':theta,'phi':phi,'width':width}})
+        self.messages.put({'action':'get_pers','data':{'fov':fov,'theta':theta,'phi':phi,'width':width,'interpolation':interpolation}})
+
+    def set_preview_fast(self,enabled):
+        self.preview_fast=enabled
+
+    def get_preview_size(self):
+        canvas_w, canvas_h = self.gui.win_size
+        try:
+            ratio_w, ratio_h = [int(i) for i in self.gui.aspect_var.get().split(':')]
+            aspect = ratio_w / ratio_h
+        except:
+            aspect = 1.0
+
+        canvas_aspect = canvas_w / max(1, canvas_h)
+        if aspect >= canvas_aspect:
+            size = canvas_w
+        else:
+            size = canvas_h
+        max_size = 1600 if self.preview_fast else 2600
+        return max(512, min(max_size, int(size)))
 
     def start_patch(self):
+        if self.is_current_dng():
+            return
         self.gui.start_waiter(text=_("Creating a patch..."))
         fov=self.cur_sets['fov']
         theta=self.cur_sets['theta']
@@ -373,6 +463,8 @@ class App:
         self.messages.put({'action':'start_patch','data':{'fov':fov,'theta':theta,'phi':phi}})
 
     def run_batch(self):
+        if self.is_current_dng():
+            return
         fov=self.cur_sets['fov']
         theta=self.cur_sets['theta']
         phi=self.cur_sets['phi']
@@ -420,11 +512,17 @@ class App:
     def get_icon(self,n):
         fname=self.file_list[n]['path']
 
-        img=Image.open(fname)
-        self.file_list[n]={'path':fname,'size':img.size,'done':self.file_list[n]['done']}
         if fname in self.icons:
             return self.icons[fname]
-        img.thumbnail((80,40))
+        thumb_size=(self.gui.u(80),self.gui.u(40))
+        if fname.suffix.lower()=='.dng':
+            img=dng_io.thumbnail(fname,thumb_size)
+            size=dng_io.image_size(fname)
+        else:
+            img=Image.open(fname)
+            size=img.size
+        self.file_list[n]={'path':fname,'size':size,'done':self.file_list[n]['done']}
+        img.thumbnail(thumb_size)
         i=ImageTk.PhotoImage(image=img)
         self.icons[fname]=i
         return i
@@ -435,14 +533,14 @@ class App:
         for path in paths:
             if os.path.isfile(path):
                 # Проверяем расширение файла
-                if path.lower().endswith(('.jpg', '.jpeg','.png', '.tiff', '.tif')):
+                if path.lower().endswith(('.jpg', '.jpeg','.png', '.tiff', '.tif', '.dng')):
                     file_list.append(path)
             elif os.path.isdir(path):
                 # Для папок проверяем все файлы внутри
                 for item in os.listdir(path):
                     full_path = os.path.join(path, item)
                     if os.path.isfile(full_path):
-                        if full_path.lower().endswith(('.jpg','.png', '.jpeg', '.tiff', '.tif')):
+                        if full_path.lower().endswith(('.jpg','.png', '.jpeg', '.tiff', '.tif', '.dng')):
                             file_list.append(full_path)
         for f in file_list:
             t={'path':Path(f),'size':[0,0],'done':False}
@@ -478,6 +576,7 @@ if __name__=='__main__':
     import app.lib.Equirec2Perspec as E2P
     import app.lib.Perspec2Equirec as P2E
     import app.lib.multi_Perspec2Equirec as m_P2E
+    from app.lib import dng_io
     import PIL
     PIL.Image.MAX_IMAGE_PIXELS = 9331200000
     from PIL import Image
@@ -494,7 +593,7 @@ if __name__=='__main__':
 
 
 
-    root=CTk(themename="darkly",hdpi=False)
+    root=CTk(themename="darkly")
     root.drop_target_register(DND_FILES)
 
     root.iconify()

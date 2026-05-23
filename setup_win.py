@@ -1,9 +1,10 @@
 import subprocess
 import shutil
 import os
+import sys
 try:shutil.rmtree('dist')
 except:pass
-process=subprocess.Popen(['pyinstaller','PanoPatcher.spec'])
+process=subprocess.Popen([sys.executable,'-m','PyInstaller','PanoPatcher.spec'])
 process.wait()
 shutil.copytree('app','dist/app')
 shutil.rmtree('dist/app/lib')

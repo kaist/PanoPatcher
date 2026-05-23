@@ -1,13 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_data_files, eval_statement
+from pathlib import Path
+
+import tkinterdnd2
 
 block_cipher = None
+tkdnd_root = Path(tkinterdnd2.__file__).parent / 'tkdnd' / 'win-x64'
+tkinterdnd2_datas = [(str(tkdnd_root), 'tkinterdnd2/tkdnd/win-x64')]
 
 
 a = Analysis(['PanoPatcher.pyw'],
              pathex=[],
              binaries=[],
-             datas=collect_data_files('tkinterdnd2'),
+             datas=tkinterdnd2_datas,
              hiddenimports=['jaraco.text'],
              excludes=[
                     'setuptools',
@@ -31,10 +35,10 @@ a = Analysis(['PanoPatcher.pyw'],
                     'networkx',
                     'numba',
                     'psutil',
-                    'pycparser'
+                    'pycparser',
                     'redis',
                     'requests',
-                    's3transfer'
+                    's3transfer',
                     'safetensors',
                     'sqlite3',
                     'sympy',
@@ -44,12 +48,25 @@ a = Analysis(['PanoPatcher.pyw'],
                     'tqdm',
                     'transformers',
                     'urllib3',
-                    'skipy.linalg',
-                    'skipy.integrate',
-                    'skipy.optimize',
-                    'skipy.parse',
-                    'skipy.special',
-                    ''
+                    'ssl',
+                    '_ssl',
+                    'pyi_splash',
+                    'PIL.ImageQt',
+                    'PIL.ImageCms',
+                    'PIL.ImageMath',
+                    'PIL.ImageFont',
+                    'PIL.WebPImagePlugin',
+                    'numpy.random',
+                    'numpy.fft',
+                    'numpy.linalg',
+                    'scipy',
+                    'scipy.linalg',
+                    'scipy.integrate',
+                    'scipy.optimize',
+                    'scipy.sparse',
+                    'scipy.special',
+                    'skimage',
+                    'scikit_image',
                     ],
              hookspath=[],
              hooksconfig={},
@@ -57,29 +74,32 @@ a = Analysis(['PanoPatcher.pyw'],
              win_no_prefer_redirects=False,
              win_private_assemblies=False,
              cipher=block_cipher,
-             collect_all=['TkinterDnD2'],
-             noarchive=True)
+             noarchive=False)
 
-a.binaries - TOC([
-  ('opencv_videoio_ffmpeg4110_64.dll', None, None),
+def keep_binary(item):
+    name = item[0].lower()
+    source = item[1].lower()
+    if name.startswith('cv2\\opencv_videoio_ffmpeg'):
+        return False
+    if 'program files\\java\\jdk' in source:
+        return False
+    if name in {'_ssl.pyd', 'libssl-3.dll'}:
+        return False
+    if name.startswith('pil\\_webp') or name.startswith('pil\\_imagingcms') or name.startswith('pil\\_imagingmath') or name.startswith('pil\\_imagingft'):
+        return False
+    if name.startswith('numpy\\random\\') or name.startswith('numpy\\fft\\') or name.startswith('numpy\\linalg\\'):
+        return False
+    return True
 
-])
+a.binaries = TOC([item for item in a.binaries if keep_binary(item)])
 pyz = PYZ(a.pure, a.zipped_data,
              cipher=block_cipher)
-splash = Splash('app\\icons\\splash.png',
-                binaries=a.binaries,
-                datas=a.datas,
-                text_pos=None,
-                text_size=12,
-                minify_script=True)
 
 exe = EXE(pyz,
           a.scripts,
           a.binaries,
           a.zipfiles,
           a.datas, 
-          splash, 
-          splash.binaries,
           [],
           name='PanoPatcher',
           debug=False,
@@ -92,4 +112,6 @@ exe = EXE(pyz,
           disable_windowed_traceback=False,
           target_arch=None,
           codesign_identity=None,
-          entitlements_file=None , icon='app/icons/icon.ico')
+          entitlements_file=None,
+          icon='app/icons/icon.ico',
+          manifest='PanoPatcher.manifest')
