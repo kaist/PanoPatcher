@@ -3,10 +3,10 @@
     "patch_exe": "",
     "patch_sync": 1,
     "patch_size": 1,
-    "fov": 130,
-    "phi": -5,
-    "theta": -78,
-    "aspect": "1:1",
+    "fov": 167,
+    "phi": -90,
+    "theta": 46,
+    "aspect": "9:16",
     "favorites": [
         {
             "fov": 135,
@@ -15,5 +15,8 @@
             "name": "test"
         }
     ],
-    "autosave": 1
+    "autosave": 1,
+    "ipano_url": "https://ipano.ru",
+    "ipano_key": "yB0LyVDjE-y8Lj2ANsou_2rvngq-v0s5MDHjAuasgGzPnx8chTs4JQsftFU1ZYdfWhk6QfaqABHmnD69DpEn",
+    "ipano_login": "zalomskij"
 }

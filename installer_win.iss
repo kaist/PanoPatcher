@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "PanoPatcher"
-#define MyAppVersion "1.25"
+#define MyAppVersion "1.30"
 #define MyAppPublisher "Igor Zalomskij"
 #define MyAppURL "https://ipano.ru"
 #define MyAppExeName "PanoPatcher.exe"
@@ -32,8 +32,8 @@ DisableProgramGroupPage=yes
 ; Uncomment the following line to run in non administrative install mode (install for current user only).
 ;PrivilegesRequired=lowest
 OutputDir=D:\cloud\Tablet\pano_patcher\output
-OutputBaseFilename=PanoPatcher installer
-SetupIconFile=D:\cloud\Tablet\pano_patcher\dist\app\icons\icon.ico
+OutputBaseFilename={#MyAppName} {#MyAppVersion} installer
+SetupIconFile=D:\cloud\Tablet\pano_patcher\app\icons\icon.ico
 SolidCompression=yes
 WizardStyle=modern
 
@@ -74,8 +74,13 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "D:\cloud\Tablet\pano_patcher\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "D:\cloud\Tablet\pano_patcher\app\*"; DestDir: "{app}\app"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "D:\cloud\Tablet\pano_patcher\app\get_actions.js"; DestDir: "{app}\app"; Flags: ignoreversion
+Source: "D:\cloud\Tablet\pano_patcher\app\icons\*"; DestDir: "{app}\app\icons"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "D:\cloud\Tablet\pano_patcher\app\locale\*"; DestDir: "{app}\app\locale"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
+
+[Dirs]
+Name: "{app}\app\data"
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

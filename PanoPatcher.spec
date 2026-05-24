@@ -48,17 +48,12 @@ a = Analysis(['PanoPatcher.pyw'],
                     'tqdm',
                     'transformers',
                     'urllib3',
-                    'ssl',
-                    '_ssl',
                     'pyi_splash',
                     'PIL.ImageQt',
                     'PIL.ImageCms',
-                    'PIL.ImageMath',
-                    'PIL.ImageFont',
                     'PIL.WebPImagePlugin',
                     'numpy.random',
                     'numpy.fft',
-                    'numpy.linalg',
                     'scipy',
                     'scipy.linalg',
                     'scipy.integrate',
@@ -83,11 +78,9 @@ def keep_binary(item):
         return False
     if 'program files\\java\\jdk' in source:
         return False
-    if name in {'_ssl.pyd', 'libssl-3.dll'}:
+    if name.startswith('pil\\_webp') or name.startswith('pil\\_imagingcms'):
         return False
-    if name.startswith('pil\\_webp') or name.startswith('pil\\_imagingcms') or name.startswith('pil\\_imagingmath') or name.startswith('pil\\_imagingft'):
-        return False
-    if name.startswith('numpy\\random\\') or name.startswith('numpy\\fft\\') or name.startswith('numpy\\linalg\\'):
+    if name.startswith('numpy\\random\\') or name.startswith('numpy\\fft\\'):
         return False
     return True
 

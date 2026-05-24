@@ -1,5 +1,6 @@
 import sys
 import os
+import sys
 import ctypes as ct
 from pathlib import Path
 from tkinter import *
@@ -7,10 +8,10 @@ from tkinter import *
 from ttkbootstrap import *
 from ttkbootstrap.constants import *
 from ttkbootstrap.dialogs.dialogs import Querybox
-from tkinter import filedialog
+from tkinter import filedialog, messagebox
 from tkinter.font import Font
 from pathlib import Path
-from PIL import Image, ImageTk
+from PIL import GifImagePlugin, Image, ImageTk
 from itertools import count
 import threading
 import PyTaskbar
@@ -23,6 +24,9 @@ try:
 except:
     notify=None
 
+APP_DIR=Path(sys.executable).resolve().parent if hasattr(sys,"frozen") else Path(__file__).resolve().parent.parent
+ICONS_DIR=APP_DIR/'app'/'icons'
+
 
 class Icons:
     def __init__(self):
@@ -31,7 +35,7 @@ class Icons:
     def init_icons(self,scale=1.0):
         self.icons.clear()
         no_scale={'icon','splash'}
-        for i in Path('app/icons').glob('*.png'):
+        for i in ICONS_DIR.glob('*.png'):
             if scale > 1.01 and i.stem not in no_scale:
                 img=Image.open(i).convert('RGBA')
                 img=img.resize((max(1,int(round(img.width*scale))),max(1,int(round(img.height*scale)))),Image.LANCZOS)
@@ -85,15 +89,25 @@ def dark_title_bar(window):
 
 
 class ImageLabel(Label):
-    def load(self, im):
-        if isinstance(im, str):
+    def load(self, im, scale=1.0):
+        if isinstance(im, (str, os.PathLike)):
             im = Image.open(im)
         self.loc = 0
         self.frames = []
+        scale = max(1.0, float(scale))
 
         try:
             for i in count(1):
-                self.frames.append(ImageTk.PhotoImage(im.copy()))
+                frame = im.copy().convert('RGBA')
+                if scale > 1.01:
+                    frame = frame.resize(
+                        (
+                            max(1, int(round(frame.width * scale))),
+                            max(1, int(round(frame.height * scale))),
+                        ),
+                        Image.LANCZOS,
+                    )
+                self.frames.append(ImageTk.PhotoImage(frame))
                 im.seek(i)
         except EOFError:
             pass
@@ -217,6 +231,9 @@ class Gui:
 
         self.batch_button=Button(self.save_frame,compound='left',bootstyle='info',style='big.info.TButton',text=_('Batch processing in PS'),command=self.show_batch,image=icons.batch)
         self.batch_button.pack(padx=self.u(5),fill=X,expand=True,pady=self.u(5))
+
+        self.ipano_button=Button(self.save_frame,compound='left',bootstyle='info',style='big.info.TButton',text=_('Upload to ipano.ru'),command=self.show_ipano_upload,image=icons.ipano)
+        self.ipano_button.pack(padx=self.u(5),fill=X,expand=True,pady=self.u(5))
 
 
         # -------------------
@@ -475,6 +492,7 @@ class Gui:
         self.patch_button.config(state='disabled')
         self.save_button.config(state='disabled')
         self.batch_button.config(state='disabled')
+        self.ipano_button.config(state='disabled')
         self.favor_button.config(state='disabled')
 
         if not initial:
@@ -500,6 +518,7 @@ class Gui:
         self.patch_button.config(state='normal')
         self.save_button.config(state='normal')
         self.batch_button.config(state='normal')
+        self.ipano_button.config(state='normal')
         self.add_button.config(state='normal')
         self.favor_button.config(state='normal')
 
@@ -511,7 +530,7 @@ class Gui:
         self.loader_win=Frame(self.canv_frame,width=self.u(400),height=self.u(300),style='black.TFrame')
         self.loader_win.pack_propagate(False) 
         self.loader_label=ImageLabel(self.loader_win,style='black.TLabel',anchor=CENTER,justify=CENTER,compound=CENTER)
-        self.loader_label.load('app/icons/loading.gif')
+        self.loader_label.load(ICONS_DIR/'loading.gif',scale=self.ui_scale)
         self.loader_label.pack(pady=self.u(10),padx=self.u(10),fill=X,expand=True)
         self.loader_label2=Label(self.loader_win,font=("", 14),style='black.TLabel',width=40,anchor=CENTER,justify=CENTER ,textvariable=self.loader_text)
         self.loader_label2.pack(pady=self.u(10),padx=self.u(10),fill=X,expand=True)
@@ -522,12 +541,207 @@ class Gui:
             self.stop_button.pack(padx=self.u(10),pady=self.u(5))
 
         self.main_canvas.create_window(self.win_size[0]/2, self.win_size[1]/2,tag="loader", window=self.loader_win,anchor=CENTER)
+
+    def set_upload_progress(self,value,total):
+        total=max(1,int(total or 1))
+        value=max(0,min(total,int(value or 0)))
+        if hasattr(self,'loader_progress'):
+            self.loader_progress.config(maximum=total,value=value)
+        self.progress.setProgress(int(value/total*100))
+
+    def ipano_upload_done(self,ok,message):
+        self.stop_waiter()
+        self.toast('ipano.ru',message)
+        if not ok:
+            try:
+                messagebox.showerror('ipano.ru',message)
+            except:
+                pass
+
     def stop_loader(self):
         self.main_canvas.delete('loader')
 
     def stop_batch(self):
         self.stop_button.config(state='disabled')
         self.app.estop=True
+
+    def show_ipano_upload(self):
+        self.ipano_win=Toplevel(self.root)
+        self.ipano_win.title('ipano.ru')
+        self.ipano_win.grab_set()
+        dark_title_bar(self.ipano_win)
+
+        self.ipano_status_var=StringVar(value='')
+        self.ipano_login_var=StringVar(value=getattr(self.app.sets,'ipano_login',''))
+        self.ipano_password_var=StringVar()
+        self.ipano_project_var=StringVar()
+        self.ipano_new_project_var=StringVar()
+        self.ipano_tour_mode_var=StringVar(value='existing')
+        self.ipano_projects=[]
+        self.ipano_auth_frame=Frame(self.ipano_win)
+        self.ipano_auth_frame.grid(row=0,column=0,sticky=NSEW,padx=self.u(10),pady=self.u(10))
+        self.ipano_project_frame=Frame(self.ipano_win)
+        self.ipano_project_frame.grid(row=0,column=0,sticky=NSEW,padx=self.u(10),pady=self.u(10))
+
+        Label(self.ipano_auth_frame,text=_('Login')).grid(row=0,column=0,sticky=W,padx=self.u(10),pady=self.u(5))
+        Entry(self.ipano_auth_frame,textvariable=self.ipano_login_var,width=28).grid(row=0,column=1,sticky=EW,padx=self.u(10),pady=self.u(5))
+
+        Label(self.ipano_auth_frame,text=_('Password')).grid(row=1,column=0,sticky=W,padx=self.u(10),pady=self.u(5))
+        Entry(self.ipano_auth_frame,textvariable=self.ipano_password_var,show='*',width=28).grid(row=1,column=1,sticky=EW,padx=self.u(10),pady=self.u(5))
+
+        self.ipano_login_button=Button(self.ipano_auth_frame,text=_('Sign in'),command=self.ipano_login,bootstyle='primary')
+        self.ipano_login_button.grid(row=2,column=0,columnspan=2,padx=self.u(10),pady=self.u(12))
+        self.ipano_auth_status=Label(self.ipano_auth_frame,textvariable=self.ipano_status_var,wraplength=self.u(330),justify=LEFT)
+        self.ipano_auth_status.grid(row=3,column=0,columnspan=2,sticky=EW,padx=self.u(10),pady=self.u(5))
+        self.ipano_auth_frame.grid_columnconfigure(1,weight=1)
+
+        Radiobutton(self.ipano_project_frame,text=_('Existing tour'),variable=self.ipano_tour_mode_var,value='existing',command=self.ipano_update_tour_mode).grid(row=0,column=0,columnspan=2,sticky=W,padx=self.u(10),pady=self.u(5))
+        self.ipano_project_combo=Combobox(self.ipano_project_frame,textvariable=self.ipano_project_var,state='readonly',width=32)
+        self.ipano_project_combo.grid(row=1,column=0,columnspan=2,sticky=EW,padx=self.u(30),pady=self.u(5))
+
+        Radiobutton(self.ipano_project_frame,text=_('New tour'),variable=self.ipano_tour_mode_var,value='new',command=self.ipano_update_tour_mode).grid(row=2,column=0,columnspan=2,sticky=W,padx=self.u(10),pady=self.u(5))
+        Label(self.ipano_project_frame,text=_('New tour title')).grid(row=3,column=0,sticky=W,padx=self.u(30),pady=self.u(5))
+        self.ipano_new_project_entry=Entry(self.ipano_project_frame,textvariable=self.ipano_new_project_var,width=32)
+        self.ipano_new_project_entry.grid(row=3,column=1,sticky=EW,padx=self.u(10),pady=self.u(5))
+
+        Label(self.ipano_project_frame,textvariable=self.ipano_status_var,wraplength=self.u(380),justify=LEFT).grid(row=4,column=0,columnspan=2,sticky=EW,padx=self.u(10),pady=self.u(10))
+        buttons_frame=Frame(self.ipano_project_frame)
+        buttons_frame.grid(row=5,column=0,columnspan=2,padx=self.u(10),pady=self.u(12))
+        self.ipano_upload_button=Button(buttons_frame,text=_('Upload'),command=self.ipano_start_upload,bootstyle='success')
+        self.ipano_upload_button.pack(side=LEFT,padx=self.u(5))
+        self.ipano_logout_button=Button(buttons_frame,text=_('Sign out'),command=self.ipano_logout,bootstyle='secondary')
+        self.ipano_logout_button.pack(side=LEFT,padx=self.u(5))
+        self.ipano_project_frame.grid_columnconfigure(1,weight=1)
+
+        self.ipano_win.grid_columnconfigure(0,weight=1)
+        self.ipano_win.update_idletasks()
+        self.ipano_win.place_window_center()
+
+        if getattr(self.app.sets,'ipano_key',''):
+            self.ipano_load_projects()
+        else:
+            self.ipano_show_auth(_('Enter login and password.'))
+
+    def ipano_login(self):
+        login=self.ipano_login_var.get().strip()
+        password=self.ipano_password_var.get()
+        if not login or not password:
+            messagebox.showerror('ipano.ru',_('Enter login and password.'))
+            return
+        self.ipano_set_busy(True,_('Signing in...'))
+        def worker():
+            try:
+                from app.lib.ipano_client import IPanoClient
+                client=IPanoClient('https://ipano.ru')
+                key=client.login(login,password)
+                projects=client.projects(key)
+                def done():
+                    self.app.sets.ipano_url='https://ipano.ru'
+                    self.app.sets.ipano_login=login
+                    self.app.sets.ipano_key=key
+                    self.app.sets.save()
+                    self.ipano_apply_projects(projects,_('Signed in.'))
+                self.root.after(0,done)
+            except Exception as e:
+                self.root.after(0,lambda e=e:self.ipano_auth_failed(str(e)))
+        threading.Thread(target=worker,daemon=True).start()
+
+    def ipano_load_projects(self):
+        self.ipano_set_busy(True,_('Checking saved session...'))
+        def worker():
+            try:
+                from app.lib.ipano_client import IPanoClient
+                client=IPanoClient('https://ipano.ru')
+                projects=client.projects(self.app.sets.ipano_key)
+                self.root.after(0,lambda:self.ipano_apply_projects(projects,_('Session is active.')))
+            except Exception:
+                self.root.after(0,lambda:self.ipano_auth_failed(_('Sign in again.')))
+        threading.Thread(target=worker,daemon=True).start()
+
+    def ipano_set_busy(self,busy,status):
+        self.ipano_status_var.set(status)
+        state='disabled' if busy else 'normal'
+        self.ipano_login_button.config(state=state)
+        self.ipano_upload_button.config(state='disabled' if busy else ('normal' if getattr(self,'ipano_key_ok',False) else 'disabled'))
+
+    def ipano_auth_failed(self,message):
+        self.ipano_key_ok=False
+        self.app.sets.ipano_key=''
+        self.app.sets.save()
+        self.ipano_project_combo.config(values=[])
+        self.ipano_show_auth(message)
+
+    def ipano_apply_projects(self,projects,status):
+        self.ipano_key_ok=True
+        self.ipano_projects=projects or []
+        values=[p.get('title','') for p in self.ipano_projects]
+        self.ipano_project_combo.config(state='readonly',values=values)
+        if values:
+            self.ipano_project_var.set(values[0])
+            self.ipano_tour_mode_var.set('existing')
+        else:
+            self.ipano_tour_mode_var.set('new')
+        self.ipano_status_var.set(status)
+        self.ipano_login_button.config(state='normal')
+        self.ipano_upload_button.config(state='normal')
+        self.ipano_show_project(status)
+        self.ipano_update_tour_mode()
+
+    def ipano_start_upload(self):
+        mode=self.ipano_tour_mode_var.get()
+        new_name=self.ipano_new_project_var.get().strip() if mode=='new' else ''
+        selected_title=self.ipano_project_var.get().strip() if mode=='existing' else ''
+        if mode=='new' and not new_name:
+            messagebox.showerror('ipano.ru',_('Enter new tour title.'))
+            return
+        if mode=='existing' and not selected_title:
+            messagebox.showerror('ipano.ru',_('Choose an existing tour or enter a new tour title.'))
+            return
+        self.ipano_win.destroy()
+        self.start_waiter(text=_('Preparing upload to ipano.ru...'),batch=1)
+        def worker():
+            try:
+                from app.lib.ipano_client import IPanoClient
+                client=IPanoClient(self.app.sets.ipano_url)
+                if mode=='new':
+                    project_pk=client.add_project(self.app.sets.ipano_key,new_name)
+                    project_name=new_name
+                else:
+                    project=next((p for p in self.ipano_projects if p.get('title')==selected_title),None)
+                    if not project:
+                        raise RuntimeError(_('Tour was not found.'))
+                    project_pk=project.get('pk')
+                    project_name=selected_title
+                self.root.after(0,lambda:self.app.start_ipano_upload(project_pk,project_name))
+            except Exception as e:
+                self.root.after(0,lambda e=e:self.ipano_upload_done(False,str(e)))
+        threading.Thread(target=worker,daemon=True).start()
+
+    def ipano_show_auth(self,status=''):
+        self.ipano_status_var.set(status)
+        self.ipano_project_frame.grid_remove()
+        self.ipano_auth_frame.grid()
+        self.ipano_login_button.config(state='normal')
+
+    def ipano_show_project(self,status=''):
+        self.ipano_status_var.set(status)
+        self.ipano_auth_frame.grid_remove()
+        self.ipano_project_frame.grid()
+
+    def ipano_update_tour_mode(self):
+        mode=self.ipano_tour_mode_var.get()
+        self.ipano_project_combo.config(state='readonly' if mode=='existing' and self.ipano_projects else 'disabled')
+        self.ipano_new_project_entry.config(state='normal' if mode=='new' else 'disabled')
+
+    def ipano_logout(self):
+        self.ipano_key_ok=False
+        self.app.sets.ipano_key=''
+        self.app.sets.save()
+        self.ipano_projects=[]
+        self.ipano_project_var.set('')
+        self.ipano_new_project_var.set('')
+        self.ipano_project_combo.config(values=[])
+        self.ipano_show_auth(_('Signed out from ipano.ru.'))
 
     def show_batch(self):
         self.swin=Toplevel(self.root)

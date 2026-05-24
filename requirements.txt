@@ -9,3 +9,4 @@ jaraco.text
 platformdirs
 tkinterdnd2-universal
 tifffile
+rawpy

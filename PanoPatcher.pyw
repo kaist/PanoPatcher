@@ -39,6 +39,9 @@ class AppSets:
             'aspect':'1:1',
             'favorites':[],
             'autosave':True,
+            'ipano_url':'https://ipano.ru',
+            'ipano_key':'',
+            'ipano_login':'',
         }
         object.__setattr__(self, 'dd', defaults.copy())
         try:
@@ -118,6 +121,10 @@ class App:
                     d=message['data']
                     self.th_save()  
 
+                if message['action']=='ipano_upload':
+                    d=message['data']
+                    self.th_ipano_upload(d['project_pk'],d.get('project_name',''))
+
                 if message['action']=='patch_open':
                     d=message['data']
                     self.patch_open()                                               
@@ -141,7 +148,10 @@ class App:
         if not self.loaded_image:return
         if interpolation is None:
             interpolation=cv2.INTER_LINEAR
-        img = self.loaded_image.GetPerspective(fov, theta, phi, width,width, interpolation=interpolation)
+        if self.is_current_dng():
+            img = self.loaded_image.GetPreviewPerspective(fov, theta, phi, width,width, interpolation=interpolation)
+        else:
+            img = self.loaded_image.GetPerspective(fov, theta, phi, width,width, interpolation=interpolation)
         self.pimg=self.cv_to_pil_preview(img)
         self.gui.update_image(self.pimg)
 
@@ -291,6 +301,54 @@ class App:
         d['done']=True
         self.file_list[self.cur_file]=d
         self.gui.rebiuld_file_list()
+
+    def get_upload_path(self,item):
+        path=item['path']
+        patched=path.parent/'pathed'/path.name
+        return patched if patched.exists() else path
+
+    def th_ipano_upload(self,project_pk,project_name=''):
+        from app.lib.ipano_client import IPanoClient
+        self.estop=False
+        client=IPanoClient(self.sets.ipano_url,timeout=120)
+        files=[]
+        for item in self.file_list:
+            path=self.get_upload_path(item)
+            if path.suffix.lower() not in ('.jpg','.jpeg','.png','.tif','.tiff'):
+                continue
+            files.append(path)
+        if not files:
+            self.gui.root.after(0,lambda:self.gui.ipano_upload_done(False,_('No files to upload. DNG is not supported by the site yet.')))
+            return
+        total=sum(p.stat().st_size for p in files)
+        uploaded_base=0
+        self.gui.root.after(0,lambda:self.gui.set_upload_progress(0,total))
+        try:
+            for n,path in enumerate(files,1):
+                if self.estop:
+                    raise RuntimeError(_('Upload was stopped.'))
+                self.gui.root.after(0,lambda n=n,path=path:self.gui.loader_text.set(f'{n}/{len(files)} '+_('Uploading {name}...').format(name=path.name)))
+                def progress(sent, request_total, base=uploaded_base):
+                    if self.estop:
+                        raise RuntimeError(_('Upload was stopped.'))
+                    file_sent=min(path.stat().st_size,sent)
+                    self.gui.root.after(0,lambda:self.gui.set_upload_progress(base+file_sent,total))
+                resp=client.upload_pano(self.sets.ipano_key,project_pk,path,progress=progress)
+                if resp.get('error'):
+                    raise RuntimeError(resp.get('message') or resp.get('error') or _('Upload failed {name}').format(name=path.name))
+                uploaded_base+=path.stat().st_size
+                self.gui.root.after(0,lambda:self.gui.set_upload_progress(uploaded_base,total))
+            self.gui.root.after(0,lambda:self.gui.ipano_upload_done(True,_('Upload to ipano.ru is complete. Tour {name}').format(name=project_name or project_pk)))
+        except Exception as e:
+            self.gui.root.after(0,lambda e=e:self.gui.ipano_upload_done(False,str(e)))
+
+    def start_ipano_upload(self,project_pk,project_name=''):
+        if not self.file_list:
+            return
+        if not self.is_opening:
+            with self.messages.mutex:
+                self.messages.queue.clear()
+        self.messages.put({'action':'ipano_upload','data':{'project_pk':project_pk,'project_name':project_name}})
 
 
 

@@ -6,8 +6,10 @@ class Equirectangular:
     def __init__(self, img_name):
         self.is_dng = dng_io.is_dng_path(img_name)
         self.dng_metadata = None
+        self._preview_img = None
         if self.is_dng:
             self._img, self.dng_metadata = dng_io.read_linear_dng(img_name)
+            self._preview_img = dng_io.rawpy_preview_bgr(img_name)
         else:
             with open(img_name, 'rb') as f:
                 img_bytes = np.frombuffer(f.read(), dtype=np.uint8)
@@ -45,13 +47,12 @@ class Equirectangular:
         return xyz
     
 
-    def GetPerspective(self, FOV, THETA, PHI, height, width, interpolation=cv2.INTER_CUBIC):
+    def _get_perspective(self, img, FOV, THETA, PHI, height, width, interpolation=cv2.INTER_CUBIC):
         #
         # THETA is left/right angle, PHI is up/down angle, both in degree
         #
 
-        equ_w = self._width
-        equ_h = self._height
+        equ_h, equ_w = img.shape[:2]
         equ_cx = (equ_w - 1) / 2.0
         equ_cy = (equ_h - 1) / 2.0
 
@@ -76,8 +77,14 @@ class Equirectangular:
 
         
             
-        persp = cv2.remap(self._img, lon.astype(np.float32), lat.astype(np.float32), interpolation, borderMode=cv2.BORDER_WRAP)
+        persp = cv2.remap(img, lon.astype(np.float32), lat.astype(np.float32), interpolation, borderMode=cv2.BORDER_WRAP)
         return persp
-        
 
+    def GetPerspective(self, FOV, THETA, PHI, height, width, interpolation=cv2.INTER_CUBIC):
+        return self._get_perspective(self._img, FOV, THETA, PHI, height, width, interpolation)
+
+    def GetPreviewPerspective(self, FOV, THETA, PHI, height, width, interpolation=cv2.INTER_CUBIC):
+        img = self._preview_img if self._preview_img is not None else self._img
+        return self._get_perspective(img, FOV, THETA, PHI, height, width, interpolation)
+        
 
